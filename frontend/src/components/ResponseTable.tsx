@@ -8,8 +8,8 @@ interface ResponseTableProps {
 
 const deviationConfig: Record<string, string> = {
   '正偏离': 'bg-green-100 text-green-700',
-  '负偏离': 'bg-red-100 text-red-700',
   '无偏离': 'bg-gray-100 text-gray-600',
+  '需人工确认': 'bg-amber-100 text-amber-700',
 };
 
 export default function ResponseTable({ rows, title }: ResponseTableProps) {

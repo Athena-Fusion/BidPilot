@@ -10,6 +10,8 @@ import EmptyState from '../components/EmptyState';
 export default function DocumentWriter() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState('');
+  const [exportError, setExportError] = useState('');
 
   useEffect(() => {
     const stored = getStoredAnalysisResult();
@@ -19,11 +21,13 @@ export default function DocumentWriter() {
   const handleExport = async () => {
     if (!result) return;
     setExporting(true);
+    setExportMessage('');
+    setExportError('');
     try {
       await api.exportMarkdown(result.task_id);
-      alert('Markdown报告已导出到 backend/data/outputs/' + result.task_id);
-    } catch (e: any) {
-      alert('导出失败: ' + e.message);
+      setExportMessage('Markdown 报告已导出到 backend/data/outputs/' + result.task_id);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : '导出失败');
     } finally {
       setExporting(false);
     }
@@ -46,6 +50,13 @@ export default function DocumentWriter() {
           <Download size={14} /> {exporting ? '导出中...' : '导出Markdown'}
         </button>
       </div>
+
+      {exportMessage && (
+        <div className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">{exportMessage}</div>
+      )}
+      {exportError && (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{exportError}</div>
+      )}
 
       {/* 技术方案 */}
       <div className="bg-white rounded-lg border p-4 mb-4">

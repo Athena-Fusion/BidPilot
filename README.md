@@ -236,6 +236,15 @@ npm run dev
 | UI/UX | 文件选择、Agent流程可视化、风险标签、报告导出，企业级工作台 |
 | 答辩表现 | 行业痛点、业务闭环、量化价值、扩展路线 |
 
+## 项目规范
+
+- 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 安全说明：[SECURITY.md](SECURITY.md)
+- 行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- 许可证：[MIT License](LICENSE)
+
+BidPilot 的产品方向是成为合规、可复核、可落地的政企软件投标辅助工作台。项目不追求替代人工判断，也不提供任何不正当竞争建议。
+
 ## 未来扩展方向
 
 1. 真实大语言模型接入（OpenAI Compatible / 自定义模型）

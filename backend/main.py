@@ -123,7 +123,10 @@ async def generate_solution(req: SolutionRequest):
         return {"solution": result.solution.model_dump()}
     # 如果没有缓存，重新分析
     if req.tender_id:
-        result = await tender_service.analyze(req.tender_id)
+        try:
+            result = await tender_service.analyze(req.tender_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
         _analysis_cache[result.task_id] = result
         return {"solution": result.solution.model_dump()}
     raise HTTPException(status_code=404, detail="未找到分析结果，请先执行分析")
@@ -136,7 +139,10 @@ async def generate_response_table(req: ResponseTableRequest):
     if result:
         return {"response_tables": result.response_tables.model_dump()}
     if req.tender_id:
-        result = await tender_service.analyze(req.tender_id)
+        try:
+            result = await tender_service.analyze(req.tender_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
         _analysis_cache[result.task_id] = result
         return {"response_tables": result.response_tables.model_dump()}
     raise HTTPException(status_code=404, detail="未找到分析结果，请先执行分析")
@@ -149,7 +155,10 @@ async def compliance_check(req: ComplianceCheckRequest):
     if result:
         return {"compliance": result.compliance.model_dump()}
     if req.tender_id:
-        result = await tender_service.analyze(req.tender_id)
+        try:
+            result = await tender_service.analyze(req.tender_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
         _analysis_cache[result.task_id] = result
         return {"compliance": result.compliance.model_dump()}
     raise HTTPException(status_code=404, detail="未找到分析结果，请先执行分析")
@@ -163,8 +172,12 @@ async def export_markdown(req: ExportRequest):
         raise HTTPException(status_code=404, detail="未找到分析结果，请先执行分析")
 
     try:
-        exported = await ExportService.export_reports(req.task_id, result.reports.model_dump())
+        exported = await ExportService.export_reports(req.task_id, result.reports.model_dump(), req.report_type)
+        if not exported:
+            raise HTTPException(status_code=404, detail=f"未找到匹配的报告类型: {req.report_type}")
         return {"status": "ok", "files": exported}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"导出失败: {str(e)}")
 

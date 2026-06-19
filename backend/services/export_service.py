@@ -11,7 +11,7 @@ class ExportService:
     """Markdown 报告导出服务"""
 
     @staticmethod
-    async def export_reports(task_id: str, reports: dict) -> list[dict]:
+    async def export_reports(task_id: str, reports: dict, report_type: str = "all") -> list[dict]:
         """导出报告到文件"""
         output_dir = Path(OUTPUT_DIR)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -25,6 +25,10 @@ class ExportService:
 
         for f in files:
             name = f.get("name", "report.md")
+            normalized_type = report_type.strip().lower()
+            normalized_name = name.lower()
+            if normalized_type not in {"", "all"} and normalized_type not in {normalized_name, normalized_name.removesuffix(".md")}:
+                continue
             content = f.get("content", "")
             file_path = task_dir / name
             try:

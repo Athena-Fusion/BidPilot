@@ -49,6 +49,14 @@ async def test_analyze():
         assert "technical_response_table.md" in [f["name"] for f in data["reports"]["files"]]
         assert "deviation_table.md" in [f["name"] for f in data["reports"]["files"]]
 
+        export_resp = await ac.post("/api/export/markdown", json={"task_id": data["task_id"], "report_type": "technical_response_table"})
+        assert export_resp.status_code == 200
+        exported = export_resp.json()
+        assert [f["name"] for f in exported["files"]] == ["technical_response_table.md"]
+
+        missing_report_resp = await ac.post("/api/export/markdown", json={"task_id": data["task_id"], "report_type": "missing_report"})
+        assert missing_report_resp.status_code == 404
+
 
 @pytest.mark.anyio
 async def test_unknown_sample_returns_404():
