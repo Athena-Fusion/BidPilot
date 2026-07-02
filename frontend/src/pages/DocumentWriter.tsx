@@ -25,7 +25,11 @@ export default function DocumentWriter() {
     setExportError('');
     try {
       await api.exportMarkdown(result.task_id);
-      setExportMessage('Markdown 报告已导出到 backend/data/outputs/' + result.task_id);
+      setExportMessage(
+        result.mode === 'static-mock'
+          ? '静态演示模式下，Markdown 报告已在页面中生成，可直接查看预览内容。'
+          : 'Markdown 报告已导出到 backend/data/outputs/' + result.task_id,
+      );
     } catch (e) {
       setExportError(e instanceof Error ? e.message : '导出失败');
     } finally {

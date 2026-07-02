@@ -3,7 +3,7 @@
 ## 环境要求
 
 - Python 3.10+
-- Node.js 18+
+- Node.js 24+（Vite 8 要求 Node `^20.19.0 || >=22.12.0`，推荐与 CI 保持 Node 24）
 - npm 9+
 
 ## 后端部署
@@ -62,6 +62,12 @@ cd frontend
 npm install
 ```
 
+生产构建默认使用内置静态 Mock 数据，适合 GitHub Pages 纯静态演示。如果要连接真实后端，在构建前设置：
+
+```bash
+VITE_API_BASE_URL=https://your-api.example.com/api
+```
+
 ### 2. 开发模式启动
 
 ```bash
@@ -90,6 +96,7 @@ npm run build
 | LLM_MODEL | deepseek-v4-flash | 模型名称 |
 | BACKEND_HOST | 0.0.0.0 | 后端监听地址 |
 | BACKEND_PORT | 8000 | 后端监听端口 |
+| VITE_API_BASE_URL | - | 前端生产构建连接的后端 API 根路径；留空时使用静态 Mock 演示 |
 | DATA_DIR | backend/data | 数据目录 |
 | OUTPUT_DIR | backend/data/outputs | 输出目录 |
 
