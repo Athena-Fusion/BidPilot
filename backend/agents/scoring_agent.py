@@ -119,8 +119,62 @@ class ScoringAgent(BaseAgent):
         parts.append("建议技术方案重点覆盖高权重评分项")
         return "；".join(parts)
 
+    async def llm_run(self, context: AgentContext, llm_output: str) -> AgentResult:
+        try:
+            from backend.utils.json_parser import extract_json
+            data = extract_json(llm_output)
+            
+            scoring = ScoringResult()
+            scoring.total_score = float(data.get("total_score", data.get("总分", 100)))
+            scoring.technical_score = float(data.get("technical_score", data.get("技术分", 0)))
+            scoring.business_score = float(data.get("business_score", data.get("商务分", 0)))
+            scoring.price_score = float(data.get("price_score", data.get("价格分", 0)))
+            
+            items_data = data.get("items", data.get("评分项", []))
+            items = []
+            for item in items_data:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("item", item.get("name", item.get("评分项", "")))
+                if not name:
+                    continue
+                score = float(item.get("score", item.get("分值", 0)))
+                weight = item.get("weight", item.get("权重", "中"))
+                desc = item.get("description", item.get("评分标准", ""))
+                strategy = item.get("strategy", item.get("策略", ""))
+                
+                items.append(ScoringItem(
+                    item=name.replace("★", "").strip(),
+                    score=score,
+                    weight=weight,
+                    description=desc[:200],
+                    strategy=strategy
+                ))
+            
+            scoring.items = items
+            # 识别高权重评分项
+            scoring.high_value_items = [
+                item for item in items
+                if item.score >= 10 or (scoring.total_score > 0 and item.score / scoring.total_score >= 0.1)
+            ]
+            scoring.strategy_summary = data.get("strategy_summary", data.get("策略摘要", ""))
+            if not scoring.strategy_summary:
+                scoring.strategy_summary = self._build_strategy_summary(scoring)
+                
+            return AgentResult(
+                agent=self.name,
+                output=scoring.model_dump(),
+                summary=f"技术{scoring.technical_score}分+商务{scoring.business_score}分+价格{scoring.price_score}分（LLM），高权重项{len(scoring.high_value_items)}个",
+                references=["招标文件第三章"]
+            )
+        except Exception as e:
+            self.logger.warning(f"LLM 提取评分规则解析失败: {e}，将退回到规则模式提取")
+            return await self.mock_run(context)
+
     def _build_prompt(self, context: AgentContext) -> str:
         return f"""请从以下招标文件中提取评分规则，包括技术分、商务分、价格分及各评分项的分值和评分标准。
+
+请以 JSON 格式返回，包含字段：total_score, technical_score, business_score, price_score, items (包含 item, score, weight, description, strategy) 和 strategy_summary。
 
 招标文件内容：
 {context.tender_text[:3000]}"""

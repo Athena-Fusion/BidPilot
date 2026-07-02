@@ -139,8 +139,61 @@ class RiskAgent(BaseAgent):
             references=["invalid_bid_risk_rules.md", "招标文件第六章"]
         )
 
+    async def llm_run(self, context: AgentContext, llm_output: str) -> AgentResult:
+        try:
+            from backend.utils.json_parser import extract_json
+            data = extract_json(llm_output)
+            if not isinstance(data, list):
+                if isinstance(data, dict):
+                    for k, v in data.items():
+                        if isinstance(v, list):
+                            data = v
+                            break
+                if not isinstance(data, list):
+                    raise ValueError("解析结果不是列表格式")
+            
+            risks = []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                risk_text = item.get("risk", item.get("风险描述", ""))
+                if not risk_text:
+                    continue
+                risk_type = item.get("risk_type", item.get("风险类型", "其他风险"))
+                severity = item.get("severity", item.get("严重程度", "medium")).lower()
+                if severity not in {"high", "medium", "low"}:
+                    severity = "medium"
+                evidence = item.get("evidence", item.get("依据", "需人工确认"))
+                action = item.get("action", item.get("建议措施", "需人工确认"))
+                
+                risks.append(RiskItem(
+                    risk=risk_text,
+                    risk_type=risk_type,
+                    severity=severity,
+                    evidence=evidence,
+                    action=action
+                ))
+                
+            if not risks:
+                raise ValueError("未提取到任何有效的风险项")
+                
+            high_count = sum(1 for r in risks if r.severity == "high")
+            medium_count = sum(1 for r in risks if r.severity == "medium")
+            
+            return AgentResult(
+                agent=self.name,
+                output=[r.model_dump() for r in risks],
+                summary=f"识别{len(risks)}项风险（LLM），其中高风险{high_count}项、中风险{medium_count}项",
+                references=["招标文件第六章"]
+            )
+        except Exception as e:
+            self.logger.warning(f"LLM 风险识别解析失败: {e}，将退回到规则模式提取")
+            return await self.mock_run(context)
+
     def _build_prompt(self, context: AgentContext) -> str:
         return f"""请从以下招标文件中识别所有废标风险和商务风险，标注风险类型、严重程度、证据和处理建议。
+
+请以 JSON 数组格式返回，每个对象包含字段：risk, risk_type, severity, evidence, action。
 
 招标文件内容：
 {context.tender_text[:3000]}"""

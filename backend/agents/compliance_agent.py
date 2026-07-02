@@ -129,8 +129,70 @@ class ComplianceAgent(BaseAgent):
             references=["compliance_checklist.md", "invalid_bid_risk_rules.md"]
         )
 
+    async def llm_run(self, context: AgentContext, llm_output: str) -> AgentResult:
+        try:
+            from backend.utils.json_parser import extract_json
+            data = extract_json(llm_output)
+            
+            compliance = ComplianceResult()
+            compliance.overall_status = data.get("overall_status", "需要人工复核")
+            compliance.pass_rate = data.get("pass_rate", "")
+            
+            def parse_issues(raw_list):
+                issues = []
+                if not isinstance(raw_list, list):
+                    return issues
+                for item in raw_list:
+                    if not isinstance(item, dict):
+                        continue
+                    name = item.get("item", item.get("检查项", ""))
+                    if not name:
+                        continue
+                    status = item.get("status", item.get("状态", "需检查"))
+                    severity = item.get("severity", item.get("严重程度", "medium")).lower()
+                    if severity not in {"high", "medium", "low"}:
+                        severity = "medium"
+                    suggestion = item.get("suggestion", item.get("处理建议", ""))
+                    
+                    issues.append(ComplianceIssue(
+                        item=name,
+                        status=status,
+                        severity=severity,
+                        suggestion=suggestion
+                    ))
+                return issues
+                
+            compliance.critical_issues = parse_issues(data.get("critical_issues", []))
+            compliance.warnings = parse_issues(data.get("warnings", []))
+            compliance.manual_review_items = data.get("manual_review_items", [])
+            compliance.suggestions = data.get("suggestions", [])
+            
+            total_checks = len(compliance.critical_issues) + len(compliance.warnings) + len(compliance.manual_review_items)
+            passed = total_checks - len(compliance.critical_issues)
+            if not compliance.pass_rate and total_checks > 0:
+                compliance.pass_rate = f"{int(passed / total_checks * 100)}%"
+                
+            return AgentResult(
+                agent=self.name,
+                output=compliance.model_dump(),
+                summary=f"合规审查（LLM）：{compliance.overall_status}，致命问题{len(compliance.critical_issues)}项，警告{len(compliance.warnings)}项",
+                references=["LLM合规审查"]
+            )
+        except Exception as e:
+            self.logger.warning(f"LLM 合规审查解析失败: {e}，将退回到规则模式提取")
+            return await self.mock_run(context)
+
     def _build_prompt(self, context: AgentContext) -> str:
-        return f"请基于招标文件进行合规审查：{context.tender_text[:2000]}"
+        return f"""请根据招标文件及生成结果进行合规审查：
+{context.tender_text[:2000]}
+
+请以 JSON 格式返回，包含字段：
+- overall_status (合规状态描述)
+- pass_rate (通过率百分比)
+- critical_issues (致命合规问题数组，每个包含 item, status, severity, suggestion)
+- warnings (中低风险警告数组，包含 item, status, severity, suggestion)
+- manual_review_items (人工审核清单，字符串数组)
+- suggestions (优化建议清单，字符串数组)"""
 
     def _build_system_prompt(self) -> str:
         return "你是投标合规审查专家。所有合规结论标注'辅助审查，需人工复核'。不声称替代人工审查。"

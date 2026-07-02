@@ -167,8 +167,77 @@ class SolutionAgent(BaseAgent):
             SolutionSection(title="12. 风险控制方案", content="升级风险：灰度发布+回滚方案\n流程风险：逐项与业务部门确认\n数据风险：迁移前后一致性校验"),
         ]
 
+    async def llm_run(self, context: AgentContext, llm_output: str) -> AgentResult:
+        try:
+            import re
+            # 使用二级标题分割大模型输出的 markdown
+            parts = re.split(r'^##\s+(.+)$', llm_output, flags=re.MULTILINE)
+            
+            sections = []
+            # 第一部分是 ## 之前的文字（如前言或导言）
+            intro = parts[0].strip()
+            if intro:
+                sections.append(SolutionSection(
+                    title="项目背景与前言",
+                    content=intro,
+                    needs_review=False
+                ))
+                
+            # 奇数索引为标题，偶数索引为内容
+            for i in range(1, len(parts), 2):
+                title = parts[i].strip()
+                content = parts[i+1].strip() if i+1 < len(parts) else ""
+                needs_review = "需人工确认" in content or "人工确认" in content
+                
+                sections.append(SolutionSection(
+                    title=title,
+                    content=content,
+                    needs_review=needs_review
+                ))
+                
+            if not sections:
+                # 尝试用一级标题分割
+                parts = re.split(r'^#\s+(.+)$', llm_output, flags=re.MULTILINE)
+                for i in range(1, len(parts), 2):
+                    title = parts[i].strip()
+                    content = parts[i+1].strip() if i+1 < len(parts) else ""
+                    needs_review = "需人工确认" in content or "人工确认" in content
+                    sections.append(SolutionSection(
+                        title=title,
+                        content=content,
+                        needs_review=needs_review
+                    ))
+                    
+            if not sections:
+                # 如果没有找到任何标题，把所有内容当作一个章节
+                sections.append(SolutionSection(
+                    title="技术方案内容",
+                    content=llm_output,
+                    needs_review="需人工确认" in llm_output
+                ))
+                
+            solution = SolutionResult()
+            solution.sections = sections
+            solution.toc = [s.title for s in sections]
+            solution.total_words = sum(len(s.content) for s in sections)
+            
+            return AgentResult(
+                agent=self.name,
+                output=solution.model_dump(),
+                summary=f"生成技术方案初稿（LLM），共{len(solution.sections)}个章节，约{solution.total_words}字",
+                references=["LLM生成技术方案"]
+            )
+        except Exception as e:
+            self.logger.warning(f"LLM 技术方案解析失败: {e}，将退回到规则模式提取")
+            return await self.mock_run(context)
+
     def _build_prompt(self, context: AgentContext) -> str:
-        return f"请基于以下招标文件生成技术方案初稿：{context.tender_text[:3000]}"
+        return f"""请基于以下招标文件生成技术方案初稿，包含必要的系统架构设计、功能设计、实施计划等章节：
+
+招标文件内容：
+{context.tender_text[:3000]}
+
+请使用标准 Markdown 格式编写，每个章节请用 '## ' 作为二级标题开头，以便解析。"""
 
     def _build_system_prompt(self) -> str:
         return "你是政企软件技术方案撰写专家。请生成技术方案初稿，不确定内容标注'需人工确认'。"

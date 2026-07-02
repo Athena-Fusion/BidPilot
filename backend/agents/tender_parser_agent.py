@@ -82,6 +82,61 @@ class TenderParserAgent(BaseAgent):
             references=["招标文件正文"]
         )
 
+    async def llm_run(self, context: AgentContext, llm_output: str) -> AgentResult:
+        try:
+            from backend.utils.json_parser import extract_json
+            data = extract_json(llm_output)
+            
+            # 规范化键值对，防止大模型返回不同的键名
+            normalized_data = {}
+            key_mapping = {
+                "project_name": ["project_name", "项目名称", "name"],
+                "buyer": ["buyer", "采购人", "采购单位", "业主"],
+                "budget": ["budget", "预算", "最高限价", "采购预算"],
+                "deadline": ["deadline", "截止时间", "投标截止时间"],
+                "service_period": ["service_period", "建设周期", "服务期限", "工期"],
+                "delivery_location": ["delivery_location", "交付地点", "实施地点"],
+                "bid_bond": ["bid_bond", "投标保证金", "保证金"],
+                "procurement_scope": ["procurement_scope", "采购范围", "采购内容"],
+                "project_type": ["project_type", "项目类型"]
+            }
+            for target_key, aliases in key_mapping.items():
+                val = ""
+                for alias in aliases:
+                    if alias in data:
+                        val = data[alias]
+                        break
+                normalized_data[target_key] = str(val) if val is not None else ""
+                
+            info = BasicInfo(**normalized_data)
+            
+            # 未识别字段标注
+            for field in ["project_name", "buyer", "budget", "deadline"]:
+                if not getattr(info, field) or getattr(info, field) == "None":
+                    setattr(info, field, "需人工确认")
+                    
+            # 若大模型未识别项目类型，自动进行推断
+            if not info.project_type or info.project_type == "None":
+                text = context.tender_text
+                if "智慧园区" in text:
+                    info.project_type = "智慧园区"
+                elif "数据中台" in text or "数据治理" in text:
+                    info.project_type = "数据中台"
+                elif "政务服务" in text or "行政审批" in text:
+                    info.project_type = "政务服务"
+                else:
+                    info.project_type = "信息化项目"
+
+            return AgentResult(
+                agent=self.name,
+                output=info.model_dump(),
+                summary=f"提取项目基本信息（LLM）：{info.project_name}，预算{info.budget}，类型{info.project_type}",
+                references=["招标文件正文"]
+            )
+        except Exception as e:
+            self.logger.warning(f"LLM 提取基本信息解析失败: {e}，将退回到规则模式提取")
+            return await self.mock_run(context)
+
     def _build_prompt(self, context: AgentContext) -> str:
         return f"""请从以下招标文件中提取基本信息，包括项目名称、采购人、预算、截止时间、服务周期、交付地点、保证金、采购范围。
 

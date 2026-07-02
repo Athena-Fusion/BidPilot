@@ -120,8 +120,62 @@ class RequirementAgent(BaseAgent):
                 RequirementItem(requirement="项目经理3年以上电子政务项目管理经验", type="人员要求", mandatory=True, risk_level="medium", suggestion="需确认项目经理经验"),
             ]
 
+    async def llm_run(self, context: AgentContext, llm_output: str) -> AgentResult:
+        try:
+            from backend.utils.json_parser import extract_json
+            data = extract_json(llm_output)
+            if not isinstance(data, list):
+                # 如果返回了包裹着列表的字典，尝试提取列表
+                if isinstance(data, dict):
+                    for k, v in data.items():
+                        if isinstance(v, list):
+                            data = v
+                            break
+                if not isinstance(data, list):
+                    raise ValueError("解析结果不是列表格式")
+            
+            requirements = []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                # 规范化键名
+                req_text = item.get("requirement", item.get("content", item.get("要求", "")))
+                if not req_text:
+                    continue
+                req_type = item.get("type", item.get("类型", ""))
+                mandatory = item.get("mandatory", item.get("是否强制", True))
+                if isinstance(mandatory, str):
+                    mandatory = "是" in mandatory or "true" in mandatory.lower()
+                risk_level = item.get("risk_level", item.get("风险等级", "low")).lower()
+                if risk_level not in {"high", "medium", "low"}:
+                    risk_level = "low"
+                suggestion = item.get("suggestion", item.get("建议", "需人工确认"))
+                
+                requirements.append(RequirementItem(
+                    requirement=req_text[:200],
+                    type=req_type,
+                    mandatory=mandatory,
+                    risk_level=risk_level,
+                    suggestion=suggestion
+                ))
+            
+            if not requirements:
+                raise ValueError("未提取到任何有效的资格要求")
+                
+            return AgentResult(
+                agent=self.name,
+                output=[r.model_dump() for r in requirements],
+                summary=f"提取{len(requirements)}项资格要求（LLM），其中高风险{sum(1 for r in requirements if r.risk_level=='high')}项",
+                references=["招标文件第二章"]
+            )
+        except Exception as e:
+            self.logger.warning(f"LLM 提取资格要求解析失败: {e}，将退回到规则模式提取")
+            return await self.mock_run(context)
+
     def _build_prompt(self, context: AgentContext) -> str:
         return f"""请从以下招标文件中提取所有资格要求，标注类型（业绩/资质/人员/财务）、是否强制、风险等级和建议。
+
+请以 JSON 数组格式返回，每个对象包含字段：requirement, type, mandatory, risk_level, suggestion。
 
 招标文件内容：
 {context.tender_text[:3000]}"""

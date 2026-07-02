@@ -20,7 +20,7 @@ export default function Layout({ children, mockMode = true }: LayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* 侧边栏 */}
-      <aside className="w-56 bg-slate-900 text-white flex flex-col flex-shrink-0">
+      <aside className="w-56 glass-sidebar text-white flex flex-col flex-shrink-0">
         <div className="p-4 border-b border-slate-700">
           <h1 className="text-lg font-bold tracking-wide">BidPilot</h1>
           <p className="text-xs text-slate-400 mt-1">政企投标智能Agent</p>

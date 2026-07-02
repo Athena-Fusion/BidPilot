@@ -44,11 +44,13 @@ class ReportAgent(BaseAgent):
         return "\n---\n**免责声明**：本报告由 BidPilot 自动生成，仅用于投标准备辅助。招标文件解释、投标文件最终内容、报价和合规判断均需由投标负责人、法务或专业人员人工复核确认。\n"
 
     def _analysis_report(self, name: str, prev: dict, now: str) -> str:
+        from backend.config import MOCK_MODE
         bi = prev.get("basic_info", {})
         reqs = prev.get("requirements", [])
         scoring = prev.get("scoring", {})
+        mode_label = "Mock 演示模式" if MOCK_MODE else "AI 智能模式 (LLM)"
         lines = [
-            f"# 招标分析报告 - {name}", f"\n生成时间：{now}  \n生成模式：Mock 演示模式\n",
+            f"# 招标分析报告 - {name}", f"\n生成时间：{now}  \n生成模式：{mode_label}\n",
             "## 基本信息",
             f"- 项目名称：{bi.get('project_name', '需人工确认')}",
             f"- 采购人：{bi.get('buyer', '需人工确认')}",

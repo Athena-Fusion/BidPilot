@@ -48,8 +48,54 @@ class BusinessAgent(BaseAgent):
         br = BusinessResponse(items=items, summary=f"共{len(items)}项商务条款，全部响应，无负偏离")
         return AgentResult(agent=self.name, output=br.model_dump(), summary=f"生成{len(items)}项商务响应", references=["business_response_template.md"])
 
+    async def llm_run(self, context: AgentContext, llm_output: str) -> AgentResult:
+        try:
+            from backend.utils.json_parser import extract_json
+            data = extract_json(llm_output)
+            
+            items_data = data.get("items", [])
+            items = []
+            for item in items_data:
+                if not isinstance(item, dict):
+                    continue
+                clause = item.get("clause", item.get("条款", ""))
+                requirement = item.get("requirement", item.get("要求", ""))
+                response = item.get("response", item.get("响应内容", ""))
+                needs_review = item.get("needs_review", item.get("需人工确认", False))
+                if isinstance(needs_review, str):
+                    needs_review = "是" in needs_review or "true" in needs_review.lower()
+                    
+                if not clause:
+                    continue
+                items.append(BusinessItem(
+                    clause=clause,
+                    requirement=requirement,
+                    response=response,
+                    needs_review=needs_review
+                ))
+                
+            if not items:
+                raise ValueError("未提取到任何有效的商务响应")
+                
+            br = BusinessResponse(
+                items=items,
+                summary=data.get("summary", f"共{len(items)}项商务条款，全部响应，无负偏离")
+            )
+            return AgentResult(
+                agent=self.name,
+                output=br.model_dump(),
+                summary=f"生成{len(items)}项商务响应（LLM）",
+                references=["LLM商务分析"]
+            )
+        except Exception as e:
+            self.logger.warning(f"LLM 商务响应解析失败: {e}，将退回到规则模式提取")
+            return await self.mock_run(context)
+
     def _build_prompt(self, context: AgentContext) -> str:
-        return f"请基于招标文件生成商务响应：{context.tender_text[:2000]}"
+        return f"""请从以下招标文件中提取关键商务条款并生成响应：
+{context.tender_text[:2000]}
+
+请以 JSON 格式返回，包含字段：items (包含 clause, requirement, response, needs_review) 和 summary。"""
 
     def _build_system_prompt(self) -> str:
         return "你是投标商务响应专家。不确定内容标注'需人工确认'。"

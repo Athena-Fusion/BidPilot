@@ -98,8 +98,38 @@ class StrategyAgent(BaseAgent):
             pt = "信息化项目"
         return f"本项目为{pt}类政企信息化项目，建议{strategy.recommendation}。识别出{high_risk_count}项高风险项，需重点关注废标条款和★号实质性要求。技术分占比最高，是得分关键。所有结论仅作为投标辅助参考，最终决策需由投标负责人确认。"
 
+    async def llm_run(self, context: AgentContext, llm_output: str) -> AgentResult:
+        try:
+            from backend.utils.json_parser import extract_json
+            data = extract_json(llm_output)
+            
+            strategy = StrategyResult()
+            strategy.recommendation = data.get("recommendation", data.get("投标建议", ""))
+            strategy.win_assessment = data.get("win_assessment", data.get("胜算评估", ""))
+            strategy.score_strategy = data.get("score_strategy", data.get("得分策略", []))
+            strategy.price_suggestion = data.get("price_suggestion", data.get("价格建议", ""))
+            strategy.material_checklist = data.get("material_checklist", data.get("材料清单", []))
+            strategy.management_summary = data.get("management_summary", data.get("管理总结", ""))
+            
+            # 校验关键字段
+            if not strategy.recommendation or not strategy.score_strategy:
+                raise ValueError("必填字段 recommendation 或 score_strategy 缺失")
+                
+            return AgentResult(
+                agent=self.name,
+                output=strategy.model_dump(),
+                summary=f"策略建议（LLM）：{strategy.recommendation}",
+                references=["common_scoring_rules.md", "invalid_bid_risk_rules.md"]
+            )
+        except Exception as e:
+            self.logger.warning(f"LLM 投标策略解析失败: {e}，将退回到规则模式提取")
+            return await self.mock_run(context)
+
     def _build_prompt(self, context: AgentContext) -> str:
-        return f"基于招标文件分析结果生成投标策略建议：{context.tender_text[:2000]}"
+        return f"""请根据招标文件分析结果生成投标策略建议：
+{context.tender_text[:2000]}
+
+请以 JSON 格式返回，包含字段：recommendation (建议参与/谨慎参与/不建议参与), win_assessment, score_strategy (字符串数组), price_suggestion, material_checklist (字符串数组), management_summary。"""
 
     def _build_system_prompt(self) -> str:
         return "你是投标策略专家。不生成围标、串标、控标或不正当竞争建议。所有建议仅作为辅助参考。"

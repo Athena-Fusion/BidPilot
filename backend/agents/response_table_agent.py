@@ -130,8 +130,70 @@ class ResponseTableAgent(BaseAgent):
     def _build_biz_deviation(self, text: str) -> list[ResponseTableRow]:
         return []
 
+    async def llm_run(self, context: AgentContext, llm_output: str) -> AgentResult:
+        try:
+            from backend.utils.json_parser import extract_json
+            data = extract_json(llm_output)
+            
+            tables = ResponseTables()
+            
+            def parse_rows(raw_list):
+                rows = []
+                if not isinstance(raw_list, list):
+                    return rows
+                for idx, item in enumerate(raw_list, 1):
+                    if not isinstance(item, dict):
+                        continue
+                    req = item.get("tender_requirement", item.get("招标要求", ""))
+                    if not req:
+                        continue
+                    resp = item.get("response", item.get("响应内容", ""))
+                    dev = item.get("deviation", item.get("偏差", "无偏离"))
+                    proof = item.get("proof", item.get("证明材料", "详见技术方案"))
+                    risk = item.get("risk_level", item.get("风险等级", "low")).lower()
+                    if risk not in {"high", "medium", "low"}:
+                        risk = "low"
+                        
+                    rows.append(ResponseTableRow(
+                        id=item.get("id", idx),
+                        tender_requirement=req,
+                        response=resp,
+                        deviation=dev,
+                        proof=proof,
+                        risk_level=risk
+                    ))
+                return rows
+                
+            tables.technical_response = parse_rows(data.get("technical_response", []))
+            tables.business_response = parse_rows(data.get("business_response", []))
+            tables.technical_deviation = parse_rows(data.get("technical_deviation", []))
+            tables.business_deviation = parse_rows(data.get("business_deviation", []))
+            
+            total = (len(tables.technical_response) + len(tables.business_response) +
+                     len(tables.technical_deviation) + len(tables.business_deviation))
+                     
+            if total == 0:
+                raise ValueError("未生成任何响应表行")
+                
+            return AgentResult(
+                agent=self.name,
+                output=tables.model_dump(),
+                summary=f"生成{total}条响应表记录（LLM），技术响应{len(tables.technical_response)}条，商务响应{len(tables.business_response)}条",
+                references=["LLM响应表分析"]
+            )
+        except Exception as e:
+            self.logger.warning(f"LLM 响应表生成解析失败: {e}，将退回到规则模式提取")
+            return await self.mock_run(context)
+
     def _build_prompt(self, context: AgentContext) -> str:
-        return f"请基于招标文件生成响应表和偏离表：{context.tender_text[:2000]}"
+        return f"""请基于以下招标文件生成技术与商务响应表及偏离表：
+{context.tender_text[:2000]}
+
+请以 JSON 格式返回，包含以下字段：
+- technical_response (包含 id, tender_requirement, response, deviation, proof, risk_level 的数组)
+- business_response (同上，商务响应)
+- technical_deviation (偏离的技术响应项数组)
+- business_deviation (偏离的商务响应项数组)"""
 
     def _build_system_prompt(self) -> str:
         return "你是投标响应表专家。强制条款默认完全响应，不主动生成负偏离，不确定内容标注'需人工确认'。"
