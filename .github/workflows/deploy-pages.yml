@@ -4,11 +4,8 @@ on:
   push:
     branches: [main]
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 # Allow only one concurrent deployment
 concurrency:
@@ -17,9 +14,6 @@ concurrency:
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,14 +34,18 @@ jobs:
         run: npm run build
         working-directory: frontend
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v6
+      - name: Publish to gh-pages
+        run: |
+          rm -rf /tmp/bidpilot-pages
+          mkdir -p /tmp/bidpilot-pages
+          cp -R frontend/dist/. /tmp/bidpilot-pages/
+          touch /tmp/bidpilot-pages/.nojekyll
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: './frontend/dist'
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan gh-pages-publish
+          git rm -rf .
+          cp -R /tmp/bidpilot-pages/. .
+          git add -A
+          git commit -m "deploy pages for ${GITHUB_SHA}"
+          git push --force origin HEAD:gh-pages
