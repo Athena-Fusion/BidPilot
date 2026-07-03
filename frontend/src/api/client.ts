@@ -27,23 +27,15 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     if (fallback) return fallback;
   }
 
-  try {
-    const resp = await fetch(`${API_BASE}${url}`, {
-      headers: { 'Content-Type': 'application/json' },
-      ...options,
-    });
-    if (!resp.ok) {
-      const fallback = mockRequest<T>(url, options);
-      if (fallback && (resp.status === 404 || resp.status === 405)) return fallback;
-      const text = await resp.text();
-      throw new Error(`API Error ${resp.status}: ${text}`);
-    }
-    return resp.json();
-  } catch (error) {
-    const fallback = mockRequest<T>(url, options);
-    if (fallback) return fallback;
-    throw error;
+  const resp = await fetch(`${API_BASE}${url}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`API Error ${resp.status}: ${text}`);
   }
+  return resp.json();
 }
 
 export const api = {
@@ -62,19 +54,15 @@ export const api = {
 
     const formData = new FormData();
     formData.append('file', file);
-    try {
-      const resp = await fetch(`${API_BASE}/tenders/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!resp.ok) {
-        if (resp.status === 404 || resp.status === 405) return getMockUploadResult(file.name);
-        throw new Error('上传失败');
-      }
-      return resp.json();
-    } catch {
-      return getMockUploadResult(file.name);
+    const resp = await fetch(`${API_BASE}/tenders/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`上传失败: ${text}`);
     }
+    return resp.json();
   },
 
   generateSolution: (taskId: string, tenderId: string = '') =>
