@@ -68,6 +68,12 @@ npm install
 VITE_API_BASE_URL=https://your-api.example.com/api
 ```
 
+当前 GitHub Pages workflow 已连接 Hugging Face Space 后端：
+
+```text
+https://jiehu-claire-bidpilot-api.hf.space/api
+```
+
 ### 2. 开发模式启动
 
 ```bash

@@ -53,6 +53,12 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 _analysis_cache: dict[str, AnalysisResult] = {}
 
 
+@app.get("/", include_in_schema=False)
+async def root():
+    """Space/root health entrypoint."""
+    return {"name": "BidPilot API", "status": "ok", "docs": "/docs", "health": "/api/health"}
+
+
 @app.get("/api/health", response_model=HealthResult)
 async def health_check():
     """健康检查"""
