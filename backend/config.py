@@ -18,6 +18,20 @@ def _resolve_path(value: str | None, default: Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else PROJECT_ROOT / path
 
+
+def _positive_int(name: str, default: int) -> int:
+    """Read a positive integer setting without making startup fragile."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _csv_setting(name: str, default: str = "") -> list[str]:
+    """Parse comma-separated settings while dropping empty entries."""
+    return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+
 # 运行模式
 MOCK_MODE = os.getenv("MOCK_MODE", "true").lower() == "true"
 OPENAI_COMPATIBLE_MODE = os.getenv("OPENAI_COMPATIBLE_MODE", "false").lower() == "true"
@@ -31,6 +45,9 @@ LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-v4-flash")
 # 服务配置
 BACKEND_HOST = os.getenv("BACKEND_HOST", "0.0.0.0")
 BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
+CORS_ORIGINS = _csv_setting("CORS_ORIGINS", "*")
+MAX_UPLOAD_SIZE_BYTES = _positive_int("MAX_UPLOAD_SIZE_BYTES", 10 * 1024 * 1024)
+ANALYSIS_CACHE_MAX_ENTRIES = _positive_int("ANALYSIS_CACHE_MAX_ENTRIES", 100)
 
 # 数据目录
 DATA_DIR = _resolve_path(os.getenv("DATA_DIR"), BASE_DIR / "data")

@@ -149,6 +149,8 @@ npm run preview
 - 运行地址：<https://jiehu-claire-bidpilot-api.hf.space>
 - 部署文件：`deploy/huggingface/`
 
+提交到 `main` 后，`.github/workflows/deploy-backend.yml` 会先构建并启动生产 Docker 镜像进行健康检查，再同步后端目录到该 Space。首次启用前，在 GitHub 仓库 Actions secrets 中添加具有该 Space 写入权限的 `HF_TOKEN`；未配置时，工作流会明确标记“跳过同步”而不会伪造部署成功。
+
 上传后端到 Space 的参考命令：
 
 ```powershell

@@ -1,0 +1,95 @@
+name: Deploy Backend to Hugging Face
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+      - deploy/huggingface/**
+      - .github/workflows/deploy-backend.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: huggingface-backend
+  cancel-in-progress: false
+
+jobs:
+  container-smoke-test:
+    name: Container smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build production image
+        run: docker build --tag bidpilot-api:test --file deploy/huggingface/Dockerfile .
+
+      - name: Start API container
+        run: docker run --detach --name bidpilot-api --publish 7860:7860 bidpilot-api:test
+
+      - name: Verify health endpoint
+        run: |
+          for attempt in {1..20}; do
+            if curl --fail --silent --show-error http://127.0.0.1:7860/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs bidpilot-api
+          exit 1
+
+      - name: Stop container
+        if: always()
+        run: docker rm --force bidpilot-api || true
+
+  deploy:
+    name: Sync Space
+    needs: container-smoke-test
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_SPACE_ID: Jiehu-Claire/bidpilot-api
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check deployment credential
+        id: credential
+        run: |
+          if [ -n "$HF_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::HF_TOKEN is not configured; backend sync was skipped."
+          fi
+
+      - name: Install Hugging Face client
+        if: steps.credential.outputs.available == 'true'
+        run: python -m pip install --upgrade huggingface_hub
+
+      - name: Stage Space files
+        if: steps.credential.outputs.available == 'true'
+        run: |
+          mkdir -p .hf-stage
+          cp deploy/huggingface/Dockerfile .hf-stage/Dockerfile
+          cp deploy/huggingface/README.md .hf-stage/README.md
+          cp -R backend .hf-stage/backend
+          find .hf-stage -type d -name __pycache__ -prune -exec rm -rf {} +
+          find .hf-stage -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+
+      - name: Upload to Hugging Face Space
+        if: steps.credential.outputs.available == 'true'
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          HfApi(token=os.environ["HF_TOKEN"]).upload_folder(
+              repo_id=os.environ["HF_SPACE_ID"],
+              repo_type="space",
+              folder_path=".hf-stage",
+              path_in_repo=".",
+              commit_message=f"deploy BidPilot backend from {os.environ['GITHUB_SHA']}",
+          )
+          PY

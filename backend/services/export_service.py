@@ -1,5 +1,6 @@
 """ExportService - 导出服务"""
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from backend.config import OUTPUT_DIR
@@ -10,9 +11,21 @@ logger = logging.getLogger(__name__)
 class ExportService:
     """Markdown 报告导出服务"""
 
+    _TASK_ID_PATTERN = re.compile(r"^analysis_[0-9a-f]{8}$")
+
+    @staticmethod
+    def _safe_report_name(name: str) -> str | None:
+        """Accept only a plain Markdown filename, never a path supplied by data."""
+        candidate = Path(name)
+        if candidate.name != name or candidate.suffix.lower() != ".md":
+            return None
+        return name
+
     @staticmethod
     async def export_reports(task_id: str, reports: dict, report_type: str = "all") -> list[dict]:
         """导出报告到文件"""
+        if not ExportService._TASK_ID_PATTERN.fullmatch(task_id):
+            raise ValueError("无效的任务标识")
         output_dir = Path(OUTPUT_DIR)
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -24,7 +37,10 @@ class ExportService:
         files = reports.get("files", [])
 
         for f in files:
-            name = f.get("name", "report.md")
+            name = ExportService._safe_report_name(f.get("name", "report.md"))
+            if not name:
+                logger.warning("跳过不安全的报告文件名")
+                continue
             normalized_type = report_type.strip().lower()
             normalized_name = name.lower()
             if normalized_type not in {"", "all"} and normalized_type not in {normalized_name, normalized_name.removesuffix(".md")}:
@@ -46,9 +62,14 @@ class ExportService:
     @staticmethod
     async def export_single(task_id: str, filename: str, content: str) -> dict:
         """导出单个文件"""
+        if not ExportService._TASK_ID_PATTERN.fullmatch(task_id):
+            raise ValueError("无效的任务标识")
+        safe_name = ExportService._safe_report_name(filename)
+        if not safe_name:
+            raise ValueError("报告文件名必须是 .md 文件名")
         output_dir = Path(OUTPUT_DIR) / task_id
         output_dir.mkdir(parents=True, exist_ok=True)
-        file_path = output_dir / filename
+        file_path = output_dir / safe_name
         file_path.write_text(content, encoding="utf-8")
         return {"name": filename, "path": str(file_path)}
 

@@ -1,7 +1,9 @@
 """BidPilot 后端测试"""
 import pytest
 from httpx import AsyncClient, ASGITransport
+from backend import main as main_module
 from backend.main import app
+from backend.services.export_service import ExportService
 
 
 @pytest.fixture
@@ -64,3 +66,52 @@ async def test_unknown_sample_returns_404():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         resp = await ac.post("/api/tenders/analyze", json={"tender_id": "sample_missing"})
         assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_upload_and_analyze_text_tender():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        upload = await ac.post(
+            "/api/tenders/upload",
+            files={"file": ("tender.txt", "项目名称：上传测试项目\n采购人：测试单位", "text/plain")},
+        )
+        assert upload.status_code == 200
+        tender_id = upload.json()["tender_id"]
+        assert tender_id.startswith("upload_")
+
+        analysis = await ac.post("/api/tenders/analyze", json={"tender_id": tender_id})
+        assert analysis.status_code == 200
+        assert analysis.json()["tender_id"] == tender_id
+
+
+@pytest.mark.anyio
+async def test_upload_rejects_empty_file_and_ambiguous_id():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        empty_upload = await ac.post(
+            "/api/tenders/upload",
+            files={"file": ("empty.txt", b"", "text/plain")},
+        )
+        assert empty_upload.status_code == 400
+
+        ambiguous_id = await ac.post("/api/tenders/analyze", json={"tender_id": "upload_"})
+        assert ambiguous_id.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_upload_rejects_files_over_configured_limit(monkeypatch):
+    monkeypatch.setattr(main_module, "MAX_UPLOAD_SIZE_BYTES", 4)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        upload = await ac.post(
+            "/api/tenders/upload",
+            files={"file": ("large.txt", b"12345", "text/plain")},
+        )
+        assert upload.status_code == 413
+
+
+def test_export_only_accepts_plain_markdown_filenames():
+    assert ExportService._safe_report_name("analysis.md") == "analysis.md"
+    assert ExportService._safe_report_name("../analysis.md") is None
+    assert ExportService._safe_report_name("analysis.txt") is None

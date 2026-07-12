@@ -77,7 +77,7 @@ export default function TenderAnalysis() {
             {loading ? '分析中...' : '一键分析'}
           </button>
         </div>
-        <FileUploader onFileSelect={handleFileUpload} />
+        <FileUploader onFileSelect={handleFileUpload} onValidationError={setError} />
       </div>
 
       {error && (
