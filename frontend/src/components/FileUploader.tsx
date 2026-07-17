@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Upload, FileText } from 'lucide-react';
+import { Upload, FileText, ShieldCheck } from 'lucide-react';
 
 interface FileUploaderProps {
   onFileSelect: (file: File) => void;
@@ -43,16 +43,23 @@ export default function FileUploader({
   };
 
   return (
-    <div
-      className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-400 transition-colors cursor-pointer"
+    <button
+      type="button"
+      className="group w-full border-2 border-dashed border-slate-200 bg-slate-50/70 rounded-2xl p-7 text-center hover:border-primary-400 hover:bg-primary-50/60 transition-all cursor-pointer focus-ring"
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
       <input ref={inputRef} type="file" accept={accept} onChange={handleChange} className="hidden" />
-      <Upload className="mx-auto text-gray-400 mb-3" size={32} />
-      <p className="text-sm text-gray-600">点击或拖拽上传招标文件</p>
-      <p className="text-xs text-gray-400 mt-1">支持 .txt .md .docx .pdf，最大 {Math.floor(maxSizeBytes / 1024 / 1024)} MB</p>
-    </div>
+      <div className="mx-auto mb-3 h-11 w-11 rounded-xl bg-white border border-slate-200 shadow-sm grid place-items-center group-hover:scale-105 group-hover:border-primary-200 transition-all">
+        <Upload className="text-primary-600" size={20} />
+      </div>
+      <p className="text-sm font-semibold text-slate-700">上传招标文件</p>
+      <p className="text-xs text-slate-500 mt-1">点击选择或直接拖拽到此处</p>
+      <div className="mt-4 flex items-center justify-center gap-3 text-[11px] text-slate-400">
+        <span className="inline-flex items-center gap-1"><FileText size={12} /> txt · md · docx · pdf</span>
+        <span className="inline-flex items-center gap-1"><ShieldCheck size={12} /> 最大 {Math.floor(maxSizeBytes / 1024 / 1024)} MB</span>
+      </div>
+    </button>
   );
 }
